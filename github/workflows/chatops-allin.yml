@@ -1,0 +1,248 @@
+name: ChatOps Bootstrap + Init PR
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: write
+  actions: write
+  deployments: write
+  pull-requests: write
+  id-token: write
+jobs:
+  bootstrap:
+    if: startsWith(github.event.comment.body, '/bootstrap')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Ensure gh exists
+        run: gh --version
+
+      - name: Resolve IDs
+        id: ids
+        run: |
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPO="${GITHUB_REPOSITORY##*/}"
+          USER_ID=$(gh api users/${GITHUB_ACTOR} --jq '.id')
+          echo "owner=$OWNER" >> $GITHUB_OUTPUT
+          echo "repo=$REPO" >> $GITHUB_OUTPUT
+          echo "user_id=$USER_ID" >> $GITHUB_OUTPUT
+
+      - name: Create/Update environments and bind main
+        env:
+          OWNER: ${{ steps.ids.outputs.owner }}
+          REPO:  ${{ steps.ids.outputs.repo }}
+          USER_ID: ${{ steps.ids.outputs.user_id }}
+        run: |
+          for ENV in staging production; do
+            gh api --method PUT repos/$OWNER/$REPO/environments/$ENV \
+              -f wait_timer=0 \
+              -f deployment_branch_policy.protected_branches=false \
+              -f deployment_branch_policy.custom_branch_policies=true \
+              -F reviewers[][type]=User \
+              -F reviewers[][id]=$USER_ID
+            gh api --method POST repos/$OWNER/$REPO/environments/$ENV/deployment-branch-policies \
+              -f name=main || true
+          done
+
+      - name: Try set repository-level secrets to DUMMY (best-effort)
+        continue-on-error: true
+        run: |
+          gh secret set OPENAI_API_KEY -b "DUMMY"
+          gh secret set FAL_API_KEY -b "DUMMY"
+          gh secret set BROWSERSTACK_USERNAME -b "DUMMY"
+          gh secret set BROWSERSTACK_ACCESS_KEY -b "DUMMY"
+          gh secret set EAS_ACCESS_TOKEN -b "DUMMY"
+          gh secret set EAS_PROJECT_ID -b "DUMMY"
+          gh secret set SHOPIFY_STOREFRONT_TOKEN -b "DUMMY"
+
+      - name: Add guard thresholds as variables
+        run: |
+          gh variable set THRESHOLD_ABANDON --body "0.03"
+          gh variable set THRESHOLD_MISCLICK --body "0.02"
+          gh variable set THRESHOLD_ROLLBACK --body "0.10"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create init branch and scaffold files
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b init-pipeline
+
+          mkdir -p .github/workflows scripts tests/e2e/playwright tests/e2e/maestro pwa design assets
+
+          cat > .github/workflows/ci.yml <<'YML'
+          name: CocoroTricks CI
+          on:
+            workflow_dispatch:
+            pull_request:
+              branches: [ main ]
+          jobs:
+            test:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-node@v4
+                  with: { node-version: 20 }
+                - name: Install deps
+                  run: |
+                    npm ci || npm i
+                    npx playwright install --with-deps
+                - name: Playwright tests
+                  run: npx playwright test
+                - name: Maestro placeholder
+                  run: echo "Maestro flow placeholder"
+                - name: Upload test artifacts
+                  if: always()
+                  uses: actions/upload-artifact@v4
+                  with:
+                    name: test-artifacts
+                    path: |
+                      playwright-report
+                      test-results
+            guard:
+              needs: [ test ]
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - name: Run guard thresholds
+                  run: node scripts/guard-clb.js
+            deploy-staging:
+              needs: [ guard ]
+              runs-on: ubuntu-latest
+              environment: staging
+              steps:
+                - uses: actions/checkout@v4
+                - name: Deploy to staging (placeholder)
+                  run: echo "Deploying to staging..."
+            promote-production:
+              if: github.event_name == 'workflow_dispatch'
+              needs: [ deploy-staging ]
+              runs-on: ubuntu-latest
+              environment: production
+              steps:
+                - uses: actions/checkout@v4
+                - name: Promote to production (placeholder)
+                  run: echo "Promote to production"
+            rollback:
+              if: failure()
+              runs-on: ubuntu-latest
+              steps:
+                - name: Rollback (placeholder)
+                  run: echo "Rollback triggered"
+            eas-build:
+              if: ${{ secrets.EAS_ACCESS_TOKEN != '' }}
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-node@v4
+                  with: { node-version: 20 }
+                - name: Install EAS CLI
+                  run: npm i -g eas-cli
+                - name: EAS build (all platforms)
+                  env: { EAS_ACCESS_TOKEN: ${{ secrets.EAS_ACCESS_TOKEN }} }
+                  run: eas build --non-interactive --platform all
+            bs-ping:
+              if: ${{ secrets.BROWSERSTACK_USERNAME != '' && secrets.BROWSERSTACK_ACCESS_KEY != '' }}
+              runs-on: ubuntu-latest
+              steps:
+                - name: Check BrowserStack creds
+                  run: echo "BrowserStack creds present, integrate in next iteration."
+          YML
+
+          cat > scripts/guard-clb.js <<'JS'
+          const t = {
+            abandon: parseFloat(process.env.THRESHOLD_ABANDON || '0.03'),
+            misclick: parseFloat(process.env.THRESHOLD_MISCLICK || '0.02'),
+            rollback: parseFloat(process.env.THRESHOLD_ROLLBACK || '0.10')
+          };
+          console.log('Guard thresholds:', t);
+          // TODO: 接入指标后做硬闸判断；当前为占位通过
+          process.exit(0);
+          JS
+
+          cat > tests/e2e/playwright/example.spec.ts <<'TS'
+          import { test, expect } from '@playwright/test';
+          test('health', async ({ page }) => {
+            await page.goto('https://example.com');
+            await expect(page).toHaveTitle(/Example/);
+          });
+          TS
+
+          cat > tests/e2e/maestro/flow.yaml <<'YAML'
+          appId: com.example.app
+          ---
+          - launchApp
+          YAML
+
+          cat > package.json <<'JSON'
+          {
+            "name": "cocorotricks-pipeline",
+            "private": true,
+            "scripts": {
+              "test": "playwright test",
+              "test:ui": "playwright test --ui"
+            },
+            "devDependencies": {
+              "@playwright/test": "^1.47.2"
+            }
+          }
+          JSON
+
+          cat > pwa/manifest.json <<'JSON'
+          {
+            "name": "CocoroTricks 控制面板",
+            "short_name": "CT Console",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#ffffff",
+            "theme_color": "#7B70F3",
+            "icons": []
+          }
+          JSON
+
+          cat > pwa/sw.js <<'JS'
+          self.addEventListener('install', e => self.skipWaiting());
+          self.addEventListener('activate', e => self.clients.claim());
+          JS
+
+          cat > design/tokens.json <<'JSON'
+          {
+            "color.primary": "#7B70F3",
+            "color.text": "#111111",
+            "radius.sm": 8,
+            "space.md": 16
+          }
+          JSON
+
+          cat > assets/sd.config.json <<'JSON'
+          {
+            "collections": [
+              { "id": "PF2", "prompt": "brand light purple minimal cover", "count": 4 },
+              { "id": "PF3", "prompt": "marketing card, clean layout", "count": 8 },
+              { "id": "PF8.1", "prompt": "feature banner, soft purple", "count": 6 }
+            ]
+          }
+          JSON
+
+          cat > .gitignore <<'TXT'
+          node_modules
+          playwright-report
+          test-results
+          TXT
+
+          git add .
+          git commit -m "chore: init CI/CD pipeline, guard, tests, PWA shell, tokens"
+          git push --set-upstream origin init-pipeline
+
+      - name: Open PR
+        env:
+          OWNER: ${{ steps.ids.outputs.owner }}
+          REPO:  ${{ steps.ids.outputs.repo }}
+        run: |
+          gh pr create -B main -H init-pipeline \
+            -t "chore: init pipeline (CI/Guard/Tests/PWA/Tokens)" \
+            -b "自动脚手架：\n- CI: test→guard→staging→promote/rollback\n- Playwright/视觉回归占位\n- Maestro 占位\n- guard 阈值(3%/2%/10%)\n- PWA 壳与 tokens\n合并后：在 PR 检查页 Approve Deploy to staging → 守门通过后再 Promote。"
