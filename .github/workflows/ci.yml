@@ -27,30 +27,14 @@ jobs:
       - name: Guard check
         run: echo "Guard thresholds checked"
 
-  # 审批 Job —— 等待你在 PR 评论输入 /approve-staging
-  approval-staging:
-    needs: [ guard ]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Await manual approval via PR comment
-        uses: trstringer/manual-approval@v1
-        with:
-          secret: ${{ github.token }}
-          approvers: ${{ github.repository_owner }}
-          minimum-approvals: 1
-          issue-number: ${{ github.event.pull_request.number }}
-          approval-type: comment
-          approve-word: "/approve-staging"
-          reject-word: "/reject"
-
-  # 部署到 staging（审批通过后才会跑）
+  # 部署到 staging（需要在 Environments 里设置 Required reviewer）
   deploy-staging:
-    needs: [ approval-staging ]
+    needs: [ guard ]
     runs-on: ubuntu-latest
     environment: staging
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy to staging (placeholder)
+      - name: Deploy to staging
         run: echo "Deploying to staging..."
 
   # 手动触发生产部署（workflow_dispatch 输入 yes 才执行）
