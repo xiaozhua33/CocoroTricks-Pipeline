@@ -1,0 +1,60 @@
+name: CocoroTricks Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: "staging or production"
+        required: true
+        default: "staging"
+      ref:
+        description: "Git ref to deploy (e.g., main or a commit SHA)"
+        required: true
+        default: "main"
+      confirm:
+        description: "Type yes to confirm deployment"
+        required: true
+        default: "no"
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "yes" ]; then
+            echo "Confirmation missing. Type yes to proceed."
+            exit 1
+          fi
+
+      - name: Echo plan
+        run: |
+          echo "Will deploy ref=${{ github.event.inputs.ref }} to env=${{ github.event.inputs.target_env }}"
+
+  deploy:
+    needs: [sanity]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - name: Set env mode
+        run: |
+          if [ "${{ github.event.inputs.target_env }}" = "production" ]; then
+            echo "MODE=prod" >> $GITHUB_ENV
+          else
+            echo "MODE=staging" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy (placeholder)
+        run: |
+          echo "Deploying with MODE=$MODE ..."
+          echo "✅ Done (placeholder)."
+
+  post:
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: echo "Deployed ${{ github.event.inputs.ref }} to ${{ github.event.inputs.target_env }} (placeholder)"
