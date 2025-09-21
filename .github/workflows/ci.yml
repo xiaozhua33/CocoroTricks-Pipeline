@@ -2,16 +2,19 @@ name: CocoroTricks CI
 
 on:
   pull_request:
-    branches: [ main ]
-  workflow_dispatch:
-    inputs:
-      promote_to_production:
-        description: "Type yes to promote to production"
-        required: true
-        default: "no"
+    branches: [ main ]      # PR 阶段只跑到 staging
+  push:
+    branches: [ main ]      # 合并到 main 后再尝试发布到 production（会卡在环境审批）
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cocorotricks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # 测试 Job（简化，占位）
+  # 测试 Job（占位）
   test:
     runs-on: ubuntu-latest
     steps:
@@ -19,17 +22,18 @@ jobs:
       - name: Dummy test
         run: echo "Run tests (placeholder)"
 
-  # 守门 Job（占位，后续可加逻辑）
+  # 守门 Job（占位）
   guard:
-    needs: [ test ]
+    needs: [test]
     runs-on: ubuntu-latest
     steps:
-      - name: Guard check
+      - name: Guard thresholds checked
         run: echo "Guard thresholds checked"
 
-  # 部署到 staging（需要在 Environments 里设置 Required reviewer）
+  # 部署到 staging（PR 上触发；需 staging 环境已设置 Required reviewers）
   deploy-staging:
-    needs: [ guard ]
+    if: github.event_name == 'pull_request'
+    needs: [guard]
     runs-on: ubuntu-latest
     environment: staging
     steps:
@@ -37,18 +41,18 @@ jobs:
       - name: Deploy to staging
         run: echo "Deploying to staging..."
 
-  # 手动触发生产部署（workflow_dispatch 输入 yes 才执行）
-  promote-production:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.promote_to_production == 'yes'
-    needs: [ deploy-staging ]
+  # 部署到 production（仅在 push 到 main 时触发；由生产环境审批放行）
+  deploy-production:
+    if: github.event_name == 'push'
+    needs: [guard]
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
-      - name: Promote to production (manual confirm: yes)
-        run: echo "Promote to production"
+      - name: Deploy to production
+        run: echo "Deploying to production..."
 
-  # 失败回滚（任意失败都会触发）
+  # 失败回滚（占位）
   rollback:
     if: failure()
     runs-on: ubuntu-latest
