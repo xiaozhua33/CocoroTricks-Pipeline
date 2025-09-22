@@ -91,12 +91,7 @@ jobs:
         if: env.EAS_ACCESS_TOKEN != ''
         run: npm i -g eas-cli
       
-      # Step 5: Log in to Expo with the access token
-      - name: Expo Login
-        if: env.EAS_ACCESS_TOKEN != ''
-        run: eas login --non-interactive --token ${{ env.EAS_ACCESS_TOKEN }}
-
-      # Step 6: Trigger a new EAS build (true build)
+      # Step 5: Trigger a new EAS build (true build)
       - name: EAS build (profile by MODE)
         if: env.EAS_ACCESS_TOKEN != '' && env.EAS_PROJECT_ID != ''
         env:
@@ -111,7 +106,7 @@ jobs:
           echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
           echo "EAS build triggered with profile $PROFILE. Build ID: $BUILD_ID"
 
-      # Step 7: Wait for the build to complete and get the status
+      # Step 6: Wait for the build to complete and get the status
       - name: Get build status and artifacts
         if: env.BUILD_URL != ''
         env:
@@ -134,7 +129,7 @@ jobs:
           echo "BUILD_QR_CODE_URL=$BUILD_QR_CODE_URL" >> $GITHUB_ENV
           echo "BUILD_URL=$BUILD_URL" >> $GITHUB_ENV
 
-      # Step 8: (Optional) OpenAI connectivity smoke test
+      # Step 7: (Optional) OpenAI connectivity smoke test
       - name: OpenAI smoke test
         if: env.OPENAI_API_KEY != '' && vars.ENABLE_OPENAI_SMOKE == 'true'
         env:
@@ -145,7 +140,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"ok"}],"max_tokens":5}' | jq .
 
-      # Step 9: (Optional) Shopify Storefront connectivity smoke test
+      # Step 8: (Optional) Shopify Storefront connectivity smoke test
       - name: Shopify Storefront smoke
         if: env.SHOPIFY_STOREFRONT_TOKEN != '' && vars.SHOPIFY_DOMAIN != ''
         env:
