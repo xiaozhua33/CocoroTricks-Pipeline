@@ -91,17 +91,45 @@ jobs:
         if: env.EAS_ACCESS_TOKEN != ''
         run: npm i -g eas-cli
 
-      # Step 5: Trigger an EAS build (placeholder)
+      # Step 5: Trigger a new EAS build (true build)
       - name: EAS build (profile by MODE)
-        if: env.EAS_ACCESS_TOKEN != ''
+        if: env.EAS_ACCESS_TOKEN != '' && env.EAS_PROJECT_ID != ''
         env:
           EAS_ACCESS_TOKEN: ${{ env.EAS_ACCESS_TOKEN }}
+          EAS_PROJECT_ID: ${{ env.EAS_PROJECT_ID }}
         run: |
           PROFILE=$( [ "$MODE" = "prod" ] && echo production || echo preview )
-          echo "Try EAS build (profile=$PROFILE)"
-          eas build --non-interactive --platform all --profile "$PROFILE" || echo "EAS build placeholder done"
+          eas build --non-interactive --platform all --profile "$PROFILE" --no-wait --json > eas-build.json
+          BUILD_URL=$(cat eas-build.json | jq -r '.[0].artifacts.buildUrl')
+          BUILD_ID=$(cat eas-build.json | jq -r '.[0].id')
+          echo "BUILD_URL=$BUILD_URL" >> $GITHUB_ENV
+          echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
+          echo "EAS build triggered with profile $PROFILE. Build ID: $BUILD_ID"
 
-      # Step 6: (Optional) OpenAI connectivity smoke test
+      # Step 6: Wait for the build to complete and get the status
+      - name: Get build status and artifacts
+        if: env.BUILD_URL != ''
+        env:
+          EAS_ACCESS_TOKEN: ${{ env.EAS_ACCESS_TOKEN }}
+          EAS_PROJECT_ID: ${{ env.EAS_PROJECT_ID }}
+          BUILD_ID: ${{ env.BUILD_ID }}
+        run: |
+          echo "Waiting for build $BUILD_ID to complete..."
+          eas build:status --json --id "$BUILD_ID" > eas-status.json
+          BUILD_STATUS=$(cat eas-status.json | jq -r '.[0].status')
+          BUILD_URL=$(cat eas-status.json | jq -r '.[0].artifacts.buildUrl')
+          BUILD_QR_CODE_URL=$(cat eas-status.json | jq -r '.[0].artifacts.qrCodeUrl')
+          
+          if [ "$BUILD_STATUS" != "finished" ]; then
+            echo "Build did not finish successfully. Status: $BUILD_STATUS"
+            exit 1
+          fi
+
+          echo "✅ EAS Build finished successfully."
+          echo "BUILD_QR_CODE_URL=$BUILD_QR_CODE_URL" >> $GITHUB_ENV
+          echo "BUILD_URL=$BUILD_URL" >> $GITHUB_ENV
+
+      # Step 7: (Optional) OpenAI connectivity smoke test
       - name: OpenAI smoke test
         if: env.OPENAI_API_KEY != '' && vars.ENABLE_OPENAI_SMOKE == 'true'
         env:
@@ -112,7 +140,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"ok"}],"max_tokens":5}' | jq .
 
-      # Step 7: (Optional) Shopify Storefront connectivity smoke test
+      # Step 8: (Optional) Shopify Storefront connectivity smoke test
       - name: Shopify Storefront smoke
         if: env.SHOPIFY_STOREFRONT_TOKEN != '' && vars.SHOPIFY_DOMAIN != ''
         env:
@@ -136,4 +164,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Summary
-        run: echo "Deployed ${{ github.event.inputs.ref }} to ${{ github.event.inputs.target_env }} (placeholder)"
+        run: |
+          echo "Deployed ${{ github.event.inputs.ref }} to ${{ github.event.inputs.target_env }}" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ env.BUILD_URL }}" ]; then
+            echo "### EAS Build Result" >> $GITHUB_STEP_SUMMARY
+            echo "**Profile:** ${{ env.MODE }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Build URL:** [${{ env.BUILD_URL }}](${{ env.BUILD_URL }})" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${{ env.BUILD_QR_CODE_URL }}" ]; then
+              echo "![QR Code](${{ env.BUILD_QR_CODE_URL }})" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "---" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "✅ All checks passed. You can now test the build or promote it to production." >> $GITHUB_STEP_SUMMARY
