@@ -10,7 +10,7 @@ on:
       ref:
         description: "Git ref to deploy (e.g., main or a commit SHA)"
         required: true
-        default: "no"
+        default: "main"
       confirm:
         description: "Type yes to confirm deployment"
         required: true
@@ -99,74 +99,4 @@ jobs:
           eas build --non-interactive --platform all --profile "$PROFILE" --no-wait --json --token ${{ env.EAS_ACCESS_TOKEN }} > eas-build.json
           BUILD_URL=$(cat eas-build.json | jq -r '.[0].artifacts.buildUrl')
           BUILD_ID=$(cat eas-build.json | jq -r '.[0].id')
-          echo "BUILD_URL=$BUILD_URL" >> $GITHUB_ENV
-          echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
-          echo "EAS build triggered with profile $PROFILE. Build ID: $BUILD_ID"
-
-      # Step 6: Wait for the build to complete and get the status
-      - name: Get build status and artifacts
-        if: env.BUILD_URL != ''
-        run: |
-          echo "Waiting for build ${{ env.BUILD_ID }} to complete..."
-          eas build:status --json --id ${{ env.BUILD_ID }} --token ${{ env.EAS_ACCESS_TOKEN }} > eas-status.json
-          BUILD_STATUS=$(cat eas-status.json | jq -r '.[0].status')
-          BUILD_URL=$(cat eas-status.json | jq -r '.[0].artifacts.buildUrl')
-          BUILD_QR_CODE_URL=$(cat eas-status.json | jq -r '.[0].artifacts.qrCodeUrl')
-          
-          if [ "$BUILD_STATUS" != "finished" ]; then
-            echo "Build did not finish successfully. Status: $BUILD_STATUS"
-            exit 1
-          fi
-
-          echo "✅ EAS Build finished successfully."
-          echo "BUILD_QR_CODE_URL=$BUILD_QR_CODE_URL" >> $GITHUB_ENV
-          echo "BUILD_URL=$BUILD_URL" >> $GITHUB_ENV
-
-      # Step 7: (Optional) OpenAI connectivity smoke test
-      - name: OpenAI smoke test
-        if: env.OPENAI_API_KEY != '' && vars.ENABLE_OPENAI_SMOKE == 'true'
-        env:
-          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
-        run: |
-          curl -sSf https://api.openai.com/v1/chat/completions \
-            -H "Authorization: Bearer $OPENAI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"ok"}],"max_tokens":5}' | jq .
-
-      # Step 8: (Optional) Shopify Storefront connectivity smoke test
-      - name: Shopify Storefront smoke
-        if: env.SHOPIFY_STOREFRONT_TOKEN != '' && vars.SHOPIFY_DOMAIN != ''
-        env:
-          TOKEN: ${{ env.SHOPIFY_STOREFRONT_TOKEN }}
-          DOMAIN: ${{ vars.SHOPIFY_DOMAIN }}
-        run: |
-          curl -sSf "https://$DOMAIN/api/2024-07/graphql.json" \
-            -H "Content-Type: application/json" \
-            -H "X-Shopify-Storefront-Access-Token: $TOKEN" \
-            --data '{"query":"{ shop { name } }"}' | jq .
-
-      # --- END OF NEW STEPS (ADDED BY GEMINI) ---
-
-      - name: Deploy (placeholder)
-        run: |
-          echo "Deploying with MODE=$MODE ..."
-          echo "✅ Done (placeholder)."
-
-  post:
-    needs: [deploy]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Summary
-        run: |
-          echo "Deployed ${{ github.event.inputs.ref }} to ${{ github.event.inputs.target_env }}" >> $GITHUB_STEP_SUMMARY
-          echo "---" >> $GITHUB_STEP_SUMMARY
-          if [ -n "${{ env.BUILD_URL }}" ]; then
-            echo "### EAS Build Result" >> $GITHUB_STEP_SUMMARY
-            echo "**Profile:** ${{ env.MODE }}" >> $GITHUB_STEP_SUMMARY
-            echo "**Build URL:** [${{ env.BUILD_URL }}](${{ env.BUILD_URL }})" >> $GITHUB_STEP_SUMMARY
-            if [ -n "${{ env.BUILD_QR_CODE_URL }}" ]; then
-              echo "![QR Code](${{ env.BUILD_QR_CODE_URL }})" >> $GITHUB_STEP_SUMMARY
-            fi
-            echo "---" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "✅ All checks passed. You can now test the build or promote it to production." >> $GITHUB_STEP_SUMMARY
+          echo
