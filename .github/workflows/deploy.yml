@@ -10,7 +10,7 @@ on:
       ref:
         description: "Git ref to deploy (e.g., main or a commit SHA)"
         required: true
-        default: "main"
+        default: "no"
       confirm:
         description: "Type yes to confirm deployment"
         required: true
@@ -94,12 +94,9 @@ jobs:
       # Step 5: Trigger a new EAS build (true build)
       - name: EAS build (profile by MODE)
         if: env.EAS_ACCESS_TOKEN != '' && env.EAS_PROJECT_ID != ''
-        env:
-          EAS_ACCESS_TOKEN: ${{ env.EAS_ACCESS_TOKEN }}
-          EAS_PROJECT_ID: ${{ env.EAS_PROJECT_ID }}
         run: |
           PROFILE=$( [ "$MODE" = "prod" ] && echo production || echo preview )
-          eas build --non-interactive --platform all --profile "$PROFILE" --no-wait --json > eas-build.json
+          eas build --non-interactive --platform all --profile "$PROFILE" --no-wait --json --token ${{ env.EAS_ACCESS_TOKEN }} > eas-build.json
           BUILD_URL=$(cat eas-build.json | jq -r '.[0].artifacts.buildUrl')
           BUILD_ID=$(cat eas-build.json | jq -r '.[0].id')
           echo "BUILD_URL=$BUILD_URL" >> $GITHUB_ENV
@@ -109,13 +106,9 @@ jobs:
       # Step 6: Wait for the build to complete and get the status
       - name: Get build status and artifacts
         if: env.BUILD_URL != ''
-        env:
-          EAS_ACCESS_TOKEN: ${{ env.EAS_ACCESS_TOKEN }}
-          EAS_PROJECT_ID: ${{ env.EAS_PROJECT_ID }}
-          BUILD_ID: ${{ env.BUILD_ID }}
         run: |
-          echo "Waiting for build $BUILD_ID to complete..."
-          eas build:status --json --id "$BUILD_ID" > eas-status.json
+          echo "Waiting for build ${{ env.BUILD_ID }} to complete..."
+          eas build:status --json --id ${{ env.BUILD_ID }} --token ${{ env.EAS_ACCESS_TOKEN }} > eas-status.json
           BUILD_STATUS=$(cat eas-status.json | jq -r '.[0].status')
           BUILD_URL=$(cat eas-status.json | jq -r '.[0].artifacts.buildUrl')
           BUILD_QR_CODE_URL=$(cat eas-status.json | jq -r '.[0].artifacts.qrCodeUrl')
