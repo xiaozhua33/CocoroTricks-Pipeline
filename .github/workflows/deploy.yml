@@ -103,17 +103,32 @@ jobs:
           eas-version: latest
           token: ${{ env.EXPO_TOKEN }}
       
-      # Step 7: Configure EAS Build (non-interactive, simplified command)
-      - name: Configure EAS Build
+      # Step 7: Check Expo Project Files (validate before configure)
+      - name: Check Expo Project Files
         if: env.EAS_PROJECT_ID != ''
         run: |
-          eas build:configure
-          # Override project ID if needed
-          jq --arg pid "${{ env.EAS_PROJECT_ID }}" '.projectId = $pid' eas.json > eas.tmp && mv eas.tmp eas.json
-          echo "EAS configured. eas.json:"
-          cat eas.json
+          if [ ! -f "app.json" ] && [ ! -f "expo.json" ] && [ ! -f "package.json" ]; then
+            echo "❌ Expo project files (app.json/expo.json/package.json) missing. Run 'npx create-expo-app' or configure locally first."
+            exit 1
+          fi
+          if grep -q '"expo"' package.json || [ -f "app.json" ] || [ -f "expo.json" ]; then
+            echo "✅ Expo project detected."
+          else
+            echo "❌ No Expo configuration found in package.json."
+            exit 1
+          fi
+          echo "Project ready for EAS."
       
-      # Step 8: Trigger a new EAS build (true build)
+      # Step 8: Update eas.json with project ID (assume pre-configured locally)
+      - name: Update eas.json with project ID
+        if: env.EAS_PROJECT_ID != '' && -f eas.json
+        run: |
+          jq --arg pid "${{ env.EAS_PROJECT_ID }}" '.projectId = $pid' eas.json > eas.tmp && mv eas.tmp eas.json
+          echo "Updated eas.json with project ID ${{ env.EAS_PROJECT_ID }}:"
+          cat eas.json
+        continue-on-error: true  # Allow build to proceed if eas.json missing
+      
+      # Step 9: Trigger a new EAS build (true build)
       - name: EAS build (profile by MODE)
         if: env.EAS_ACCESS_TOKEN != '' && env.EAS_PROJECT_ID != ''
         env:
@@ -127,7 +142,7 @@ jobs:
           echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
           echo "EAS build triggered with profile $PROFILE. Build ID: $BUILD_ID"
 
-      # Step 9: Wait for the build to complete and get the status
+      # Step 10: Wait for the build to complete and get the status
       - name: Get build status and artifacts
         if: env.BUILD_URL != ''
         env:
@@ -148,7 +163,7 @@ jobs:
           echo "BUILD_QR_CODE_URL=$BUILD_QR_CODE_URL" >> $GITHUB_ENV
           echo "BUILD_URL=$BUILD_URL" >> $GITHUB_ENV
 
-      # Step 10: (Optional) OpenAI connectivity smoke test
+      # Step 11: (Optional) OpenAI connectivity smoke test
       - name: OpenAI smoke test
         if: env.OPENAI_API_KEY != '' && vars.ENABLE_OPENAI_SMOKE == 'true'
         env:
@@ -159,7 +174,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"ok"}],"max_tokens":5}' | jq .
 
-      # Step 11: (Optional) Shopify Storefront connectivity smoke test
+      # Step 12: (Optional) Shopify Storefront connectivity smoke test
       - name: Shopify Storefront smoke
         if: env.SHOPIFY_STOREFRONT_TOKEN != '' && vars.SHOPIFY_DOMAIN != ''
         env:
