@@ -138,7 +138,12 @@ jobs:
         env:
           EXPO_TOKEN: ${{ env.EXPO_TOKEN }}
         run: |
-          PROFILE=$( [ "$MODE" = "prod" ] && echo production || echo preview )
+          if [ "$MODE" = "prod" ]; then
+            PROFILE=production
+          else
+            PROFILE=preview
+          fi
+          echo "Using profile: $PROFILE"
           eas build --non-interactive --platform all --profile "$PROFILE" --no-wait --json > eas-build.json
           BUILD_URL=$(cat eas-build.json | jq -r '.[0].artifacts.buildUrl')
           BUILD_ID=$(cat eas-build.json | jq -r '.[0].id')
