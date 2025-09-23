@@ -90,7 +90,12 @@ jobs:
         run: |
           curl -sSf -u "${{ env.BROWSERSTACK_USERNAME }}:${{ env.BROWSERSTACK_ACCESS_KEY }}" https://api.browserstack.com/automate/plan.json | jq .
 
-      # Step 5: Setup Expo and EAS CLI (official action for non-interactive CI)
+      # Step 5: Install jq for JSON manipulation
+      - name: Install jq
+        if: env.EAS_PROJECT_ID != ''
+        run: sudo apt-get update && sudo apt-get install -y jq
+      
+      # Step 6: Setup Expo and EAS CLI (official action for non-interactive CI)
       - name: Setup Expo and EAS
         if: env.EAS_ACCESS_TOKEN != ''
         uses: expo/expo-github-action@v8
@@ -98,17 +103,17 @@ jobs:
           eas-version: latest
           token: ${{ env.EXPO_TOKEN }}
       
-      # Step 6: Configure EAS Build (non-interactive)
+      # Step 7: Configure EAS Build (non-interactive, simplified command)
       - name: Configure EAS Build
         if: env.EAS_PROJECT_ID != ''
         run: |
-          eas build:configure --non-interactive --platform all
+          eas build:configure
           # Override project ID if needed
           jq --arg pid "${{ env.EAS_PROJECT_ID }}" '.projectId = $pid' eas.json > eas.tmp && mv eas.tmp eas.json
           echo "EAS configured. eas.json:"
           cat eas.json
       
-      # Step 7: Trigger a new EAS build (true build)
+      # Step 8: Trigger a new EAS build (true build)
       - name: EAS build (profile by MODE)
         if: env.EAS_ACCESS_TOKEN != '' && env.EAS_PROJECT_ID != ''
         env:
@@ -122,7 +127,7 @@ jobs:
           echo "BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
           echo "EAS build triggered with profile $PROFILE. Build ID: $BUILD_ID"
 
-      # Step 8: Wait for the build to complete and get the status
+      # Step 9: Wait for the build to complete and get the status
       - name: Get build status and artifacts
         if: env.BUILD_URL != ''
         env:
@@ -143,7 +148,7 @@ jobs:
           echo "BUILD_QR_CODE_URL=$BUILD_QR_CODE_URL" >> $GITHUB_ENV
           echo "BUILD_URL=$BUILD_URL" >> $GITHUB_ENV
 
-      # Step 9: (Optional) OpenAI connectivity smoke test
+      # Step 10: (Optional) OpenAI connectivity smoke test
       - name: OpenAI smoke test
         if: env.OPENAI_API_KEY != '' && vars.ENABLE_OPENAI_SMOKE == 'true'
         env:
@@ -154,7 +159,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"ok"}],"max_tokens":5}' | jq .
 
-      # Step 10: (Optional) Shopify Storefront connectivity smoke test
+      # Step 11: (Optional) Shopify Storefront connectivity smoke test
       - name: Shopify Storefront smoke
         if: env.SHOPIFY_STOREFRONT_TOKEN != '' && vars.SHOPIFY_DOMAIN != ''
         env:
