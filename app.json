@@ -6,14 +6,14 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gakai0917.CocoroTricksPipeline"
     },
     "android": {
       "adaptiveIcon": {
@@ -30,6 +30,11 @@
       "eas": {
         "projectId": "617fd36b-1032-4127-8566-5651c379506b"
       }
-    }
+    },
+    "sdkVersion": "54.0.0",
+    "platforms": [
+      "ios",
+      "android"
+    ]
   }
 }
