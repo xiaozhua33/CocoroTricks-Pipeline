@@ -80,6 +80,7 @@ jobs:
           echo "BS_USER=$( [ -n "$BROWSERSTACK_USERNAME" ] && echo OK || echo MISSING )"
           echo "EAS=$( [ -n "$EAS_ACCESS_TOKEN" ] && echo OK || echo MISSING )"
           echo "SHOPIFY=$( [ -n "$SHOPIFY_STOREFRONT_TOKEN" ] && echo OK || echo MISSING )"
+          echo "EAS_PROJECT_ID=$( [ -n "$EAS_PROJECT_ID" ] && echo OK || echo MISSING )"
       
       # Step 4: Check BrowserStack connectivity
       - name: BrowserStack ping
@@ -124,9 +125,15 @@ jobs:
         if: env.EAS_PROJECT_ID != ''
         run: |
           if [ -f eas.json ]; then
-            jq --arg pid "${{ env.EAS_PROJECT_ID }}" '.projectId = $pid' eas.json > eas.tmp && mv eas.tmp eas.json
-            echo "Updated eas.json with project ID ${{ env.EAS_PROJECT_ID }}:"
-            cat eas.json
+            # Validate current eas.json
+            if jq empty eas.json 2>/dev/null; then
+              jq --arg pid "${{ env.EAS_PROJECT_ID }}" '.projectId = $pid' eas.json > eas.tmp && mv eas.tmp eas.json
+              echo "Updated eas.json with project ID ${{ env.EAS_PROJECT_ID }}:"
+              cat eas.json
+            else
+              echo "Error: eas.json is not valid JSON before update."
+              exit 1
+            fi
           else
             echo "Warning: eas.json not found. Ensure it's committed to the repo."
           fi
@@ -138,7 +145,12 @@ jobs:
         env:
           EXPO_TOKEN: ${{ env.EXPO_TOKEN }}
         run: |
-          PROFILE=$( [ "$MODE" = "prod" ] && echo production || echo preview )
+          if [ "$MODE" = "prod" ]; then
+            PROFILE=production
+          else
+            PROFILE=preview
+          fi
+          echo "Using profile: $PROFILE"
           eas build --non-interactive --platform all --profile "$PROFILE" --no-wait --json > eas-build.json
           BUILD_URL=$(cat eas-build.json | jq -r '.[0].artifacts.buildUrl')
           BUILD_ID=$(cat eas-build.json | jq -r '.[0].id')
@@ -215,3 +227,4 @@ jobs:
             echo "---" >> $GITHUB_STEP_SUMMARY
           fi
           echo "✅ All checks passed. You can now test the build or promote it to production." >> $GITHUB_STEP_SUMMARY
+cat .github/workflows/deploy.yml
