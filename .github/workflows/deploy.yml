@@ -15,7 +15,7 @@ on:
         description: "Type yes to confirm deployment"
         required: true
         default: "no"
-        
+
 jobs:
   sanity:
     runs-on: ubuntu-latest
@@ -127,11 +127,10 @@ jobs:
           if [ -f eas.json ]; then
             # Validate current eas.json
             if jq empty eas.json 2>/dev/null; then
-              jq --arg pid "${{ env.EAS_PROJECT_ID }}" '.projectId = $pid' eas.json > eas.tmp && mv eas.tmp eas.json
-              echo "Updated eas.json with project ID ${{ env.EAS_PROJECT_ID }}:"
+              echo "eas.json is valid. Project ID is remote (via token)."
               cat eas.json
             else
-              echo "Error: eas.json is not valid JSON before update."
+              echo "Error: eas.json is not valid JSON."
               exit 1
             fi
           else
